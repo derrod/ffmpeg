@@ -83,6 +83,15 @@ typedef void ID3D11Device;
 #define NVENC_NO_DEPRECATED_RC
 #endif
 
+// SDK 12.2 compile time feature checks
+#if NVENCAPI_CHECK_VERSION(12, 2)
+#define NVENC_HAVE_ULTRA_HIGH_QUALITY_TUNING_INFO
+#define NVENC_HAVE_LOOKAHEAD_LEVEL
+#define NVENC_HAVE_TEMPORAL_FILTER
+#define NVENC_HAVE_UNIDIRECTIONAL_B
+#define NVENC_HAVE_HIGH_BIT_DEPTH
+#endif
+
 typedef struct NvencSurface
 {
     NV_ENC_INPUT_PTR input_surface;
@@ -230,6 +239,9 @@ typedef struct NvencContext
     int flags;
     int async_depth;
     int rc_lookahead;
+    int lookahead_level;
+    int tf_level;
+    int unidir_b;
     int aq;
     int no_scenecut;
     int forced_idr;

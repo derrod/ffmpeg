@@ -242,7 +242,13 @@ static void nvenc_map_preset(NvencContext *ctx)
 
 static void nvenc_print_driver_requirement(AVCodecContext *avctx, int level)
 {
-#if NVENCAPI_CHECK_VERSION(12, 1)
+#if NVENCAPI_CHECK_VERSION(12, 2)
+# if defined(_WIN32) || defined(__CYGWIN__)
+    const char *minver = "(unknown)";
+# else
+    const char *minver = "(unknown)";
+# endif
+#elif NVENCAPI_CHECK_VERSION(12, 1)
     const char *minver = "(unknown)";
 #elif NVENCAPI_CHECK_VERSION(12, 0)
 # if defined(_WIN32) || defined(__CYGWIN__)
@@ -593,6 +599,22 @@ static int nvenc_check_capabilities(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_WARNING, "Constrained encoding not supported by the device\n");
         return AVERROR(ENOSYS);
     }
+
+#ifdef NVENC_HAVE_LOOKAHEAD_LEVEL
+    ret = nvenc_check_cap(avctx, NV_ENC_CAPS_SUPPORT_LOOKAHEAD_LEVEL);
+    if(ctx->lookahead_level && ret <= 0) {
+        av_log(avctx, AV_LOG_WARNING, "Lookahead Level not supported by the device\n");
+        return AVERROR(ENOSYS);
+    }
+#endif
+
+#ifdef NVENC_HAVE_TEMPORAL_FILTER
+    ret = nvenc_check_cap(avctx, NV_ENC_CAPS_SUPPORT_TEMPORAL_FILTER);
+    if(ctx->tf_level && ret <= 0) {
+        av_log(avctx, AV_LOG_WARNING, "Temporal Filter not supported by the device\n");
+        return AVERROR(ENOSYS);
+    }
+#endif
 
     ctx->support_dyn_bitrate = nvenc_check_cap(avctx, NV_ENC_CAPS_SUPPORT_DYN_BITRATE_CHANGE);
 
@@ -1116,6 +1138,10 @@ static av_cold void nvenc_setup_rate_control(AVCodecContext *avctx)
             if (ctx->encode_config.rcParams.lookaheadDepth < ctx->rc_lookahead)
                 av_log(avctx, AV_LOG_WARNING, "Clipping lookahead depth to %d (from %d) due to lack of surfaces/delay",
                     ctx->encode_config.rcParams.lookaheadDepth, ctx->rc_lookahead);
+#ifdef NVENC_HAVE_LOOKAHEAD_LEVEL
+			if (avctx->codec->id == AV_CODEC_ID_HEVC && ctx->lookahead_level >= 0)
+	            ctx->encode_config.rcParams.lookaheadLevel = ctx->lookahead_level;
+#endif
         }
     }
 
@@ -1268,6 +1294,11 @@ static av_cold int nvenc_setup_h264_config(AVCodecContext *avctx)
     h264->numRefL1 = avctx->refs;
 #endif
 
+#ifdef NVENC_HAVE_HIGH_BIT_DEPTH
+    h264->inputBitDepth = NV_ENC_BIT_DEPTH_8;
+    h264->outputBitDepth = NV_ENC_BIT_DEPTH_8;
+#endif
+
     return 0;
 }
 
@@ -1370,7 +1401,12 @@ static av_cold int nvenc_setup_hevc_config(AVCodecContext *avctx)
 
     hevc->chromaFormatIDC = IS_YUV444(ctx->data_pix_fmt) ? 3 : 1;
 
+#ifdef NVENC_HAVE_HIGH_BIT_DEPTH
+    hevc->inputBitDepth = IS_10BIT(ctx->data_pix_fmt) ? NV_ENC_BIT_DEPTH_10 : NV_ENC_BIT_DEPTH_8;
+    hevc->outputBitDepth = (IS_10BIT(ctx->data_pix_fmt) || ctx->highbitdepth) ? NV_ENC_BIT_DEPTH_10 : NV_ENC_BIT_DEPTH_8;
+#else
     hevc->pixelBitDepthMinus8 = IS_10BIT(ctx->data_pix_fmt) ? 2 : 0;
+#endif
 
     hevc->level = ctx->level;
 
@@ -1384,6 +1420,11 @@ static av_cold int nvenc_setup_hevc_config(AVCodecContext *avctx)
 #ifdef NVENC_HAVE_MULTIPLE_REF_FRAMES
     hevc->numRefL0 = avctx->refs;
     hevc->numRefL1 = avctx->refs;
+#endif
+
+#ifdef NVENC_HAVE_TEMPORAL_FILTER
+    if (ctx->tf_level >= 0)
+        hevc->tfLevel = ctx->tf_level;
 #endif
 
     return 0;
@@ -1455,8 +1496,13 @@ static av_cold int nvenc_setup_av1_config(AVCodecContext *avctx)
 
     av1->chromaFormatIDC = IS_YUV444(ctx->data_pix_fmt) ? 3 : 1;
 
+#ifdef NVENC_HAVE_HIGH_BIT_DEPTH
+    av1->inputBitDepth = IS_10BIT(ctx->data_pix_fmt) ? NV_ENC_BIT_DEPTH_10 : NV_ENC_BIT_DEPTH_8;
+    av1->outputBitDepth = (IS_10BIT(ctx->data_pix_fmt) || ctx->highbitdepth) ? NV_ENC_BIT_DEPTH_10 : NV_ENC_BIT_DEPTH_8;
+#else
     av1->inputPixelBitDepthMinus8 = IS_10BIT(ctx->data_pix_fmt) ? 2 : 0;
     av1->pixelBitDepthMinus8 = (IS_10BIT(ctx->data_pix_fmt) || ctx->highbitdepth) ? 2 : 0;
+#endif
 
     if (ctx->b_ref_mode >= 0)
         av1->useBFramesAsRef = ctx->b_ref_mode;
@@ -1587,6 +1633,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     ctx->init_encode_params.enableEncodeAsync = 0;
     ctx->init_encode_params.enablePTD = 1;
+
+#ifdef NVENC_HAVE_UNIDIRECTIONAL_B
+    ctx->init_encode_params.enableUniDirectionalB = ctx->unidir_b;
+#endif
 
 #ifdef NVENC_HAVE_NEW_PRESETS
     /* If lookahead isn't set from CLI, use value from preset.
@@ -2685,6 +2735,7 @@ static int nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame)
             pic_params.encodePicFlags = 0;
         }
 
+        pic_params.frameIdx = frame->pts;
         pic_params.inputTimeStamp = frame->pts;
 
         if (ctx->extra_sei) {

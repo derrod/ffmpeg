@@ -51,11 +51,18 @@ static const AVOption options[] = {
     { "p5",          "slow (good quality)",                 0,                    AV_OPT_TYPE_CONST, { .i64 = PRESET_P5 },                  0, 0, VE, .unit = "preset" },
     { "p6",          "slower (better quality)",             0,                    AV_OPT_TYPE_CONST, { .i64 = PRESET_P6 },                  0, 0, VE, .unit = "preset" },
     { "p7",          "slowest (best quality)",              0,                    AV_OPT_TYPE_CONST, { .i64 = PRESET_P7 },                  0, 0, VE, .unit = "preset" },
+#ifdef NVENC_HAVE_ULTRA_HIGH_QUALITY_TUNING_INFO
+    { "tune",        "Set the encoding tuning info",        OFFSET(tuning_info),  AV_OPT_TYPE_INT,   { .i64 = NV_ENC_TUNING_INFO_HIGH_QUALITY }, NV_ENC_TUNING_INFO_HIGH_QUALITY, NV_ENC_TUNING_INFO_ULTRA_HIGH_QUALITY,  VE, .unit = "tune" },
+#else
     { "tune",        "Set the encoding tuning info",        OFFSET(tuning_info),  AV_OPT_TYPE_INT,   { .i64 = NV_ENC_TUNING_INFO_HIGH_QUALITY }, NV_ENC_TUNING_INFO_HIGH_QUALITY, NV_ENC_TUNING_INFO_LOSSLESS,  VE, .unit = "tune" },
+#endif
     { "hq",          "High quality",                        0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TUNING_INFO_HIGH_QUALITY },             0, 0, VE, .unit = "tune" },
     { "ll",          "Low latency",                         0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TUNING_INFO_LOW_LATENCY },              0, 0, VE, .unit = "tune" },
     { "ull",         "Ultra low latency",                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY },        0, 0, VE, .unit = "tune" },
     { "lossless",    "Lossless",                            0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TUNING_INFO_LOSSLESS },                 0, 0, VE, .unit = "tune" },
+#ifdef NVENC_HAVE_ULTRA_HIGH_QUALITY_TUNING_INFO
+    { "uhq",         "Ultra High quality",                  0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TUNING_INFO_ULTRA_HIGH_QUALITY },       0, 0, VE, .unit = "tune" },
+#endif
 #endif
     { "profile",      "Set the encoding profile",           OFFSET(profile),      AV_OPT_TYPE_INT,   { .i64 = NV_ENC_HEVC_PROFILE_MAIN }, NV_ENC_HEVC_PROFILE_MAIN, AV_PROFILE_HEVC_REXT, VE, .unit = "profile" },
     { "main",         "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_HEVC_PROFILE_MAIN },    0, 0, VE, .unit = "profile" },
@@ -112,6 +119,20 @@ static const AVOption options[] = {
 #endif
     { "rc-lookahead", "Number of frames to look ahead for rate-control",
                                                             OFFSET(rc_lookahead), AV_OPT_TYPE_INT,   { .i64 = 0 }, 0, INT_MAX, VE },
+#ifdef NVENC_HAVE_LOOKAHEAD_LEVEL
+    { "lookahead_level", "Lookahead Level",                 OFFSET(lookahead_level), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, NV_ENC_LOOKAHEAD_LEVEL_3, VE },
+#endif
+#ifdef NVENC_HAVE_TEMPORAL_FILTER
+    { "tf_level",     "Temporal Filter Level",              OFFSET(tf_level),     AV_OPT_TYPE_INT,   { .i64 = -1 }, -1, INT_MAX, VE, "tf_level" },
+    { "4",            "Temporal Filter Level 4",            0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TEMPORAL_FILTER_LEVEL_4 },             0, 0, VE, "tf_level" },
+#endif
+#ifdef NVENC_HAVE_UNIDIRECTIONAL_B
+    { "unidir_b",     "set to 1 to enable Unidirectional B frames",
+                                                            OFFSET(unidir_b),     AV_OPT_TYPE_BOOL,  { .i64 = 0 }, 0, 1, VE },
+#endif
+#ifdef NVENC_HAVE_HIGH_BIT_DEPTH
+    { "highbitdepth", "Enable 10 bit encode for 8 bit input",OFFSET(highbitdepth),AV_OPT_TYPE_BOOL,  { .i64 = 0 }, 0, 1, VE },
+#endif
     { "surfaces",     "Number of concurrent surfaces",      OFFSET(nb_surfaces),  AV_OPT_TYPE_INT,   { .i64 = 0 }, 0, MAX_REGISTERED_FRAMES, VE },
     { "cbr",          "Use cbr encoding mode",              OFFSET(cbr),          AV_OPT_TYPE_BOOL,  { .i64 = 0 },   0, 1, VE },
     { "2pass",        "Use 2pass encoding mode",            OFFSET(twopass),      AV_OPT_TYPE_BOOL,  { .i64 = -1 }, -1, 1, VE },
