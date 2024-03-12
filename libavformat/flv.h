@@ -56,6 +56,8 @@
 #define KEYFRAMES_TIMESTAMP_TAG  "times"
 #define KEYFRAMES_BYTEOFFSET_TAG "filepositions"
 
+#define ERTMP_HACK_MAX_STREAMS 16
+
 
 enum {
     FLV_HEADER_FLAG_HASVIDEO = 1,
@@ -125,6 +127,13 @@ enum {
     PacketTypeCodedFramesX          = 3,
     PacketTypeMetadata              = 4,
     PacketTypeMPEG2TSSequenceStart  = 5,
+    PacketTypeMultitrack            = 6,
+};
+
+enum multitrack_type_t {
+	MULTITRACKTYPE_ONE_TRACK               = 0x00,
+	MULTITRACKTYPE_MANY_TRACKS             = 0x10,
+	MULTITRACKTYPE_MANY_TRACKS_MANY_CODECS = 0x20,
 };
 
 enum {
