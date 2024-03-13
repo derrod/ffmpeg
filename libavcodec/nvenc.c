@@ -1649,6 +1649,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
     if (ctx->weighted_pred == 1)
         ctx->init_encode_params.enableWeightedPrediction = 1;
 
+#ifdef NVENC_HAVE_SPLIT_ENCODE
+    ctx->init_encode_params.splitEncodeMode = ctx->split_encode;
+#endif
+
     if (ctx->bluray_compat) {
         ctx->aud = 1;
         ctx->dpb_size = FFMIN(FFMAX(avctx->refs, 0), 6);

@@ -63,6 +63,14 @@ static const AVOption options[] = {
 #ifdef NVENC_HAVE_ULTRA_HIGH_QUALITY_TUNING_INFO
     { "uhq",         "Ultra High quality",                  0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TUNING_INFO_ULTRA_HIGH_QUALITY },       0, 0, VE, .unit = "tune" },
 #endif
+#ifdef NVENC_HAVE_SPLIT_ENCODE
+    { "split_encode", "Set the split encoding mode",        OFFSET(split_encode), AV_OPT_TYPE_INT,   { .i64 = NV_ENC_SPLIT_AUTO_MODE }, NV_ENC_SPLIT_AUTO_MODE, NV_ENC_SPLIT_DISABLE_MODE, VE, .unit = "split" },
+    { "auto",         "Automatic",                          0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_AUTO_MODE },         0, 0, VE, .unit = "split" },
+    { "forced",       "Forced on",                          0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_AUTO_FORCED_MODE },  0, 0, VE, .unit = "split" },
+    { "2way",         "Forced 2-way split",                 0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_TWO_FORCED_MODE },   0, 0, VE, .unit = "split" },
+    { "3way",         "Forced 3-way split",                 0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_THREE_FORCED_MODE }, 0, 0, VE, .unit = "split" },
+    { "disabled",     "Disabled",                           0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_DISABLE_MODE },      0, 0, VE, .unit = "split" },
+#endif
 #endif
     { "profile",      "Set the encoding profile",           OFFSET(profile),      AV_OPT_TYPE_INT,   { .i64 = NV_ENC_HEVC_PROFILE_MAIN }, NV_ENC_HEVC_PROFILE_MAIN, AV_PROFILE_HEVC_REXT, VE, .unit = "profile" },
     { "main",         "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_HEVC_PROFILE_MAIN },    0, 0, VE, .unit = "profile" },

@@ -43,6 +43,14 @@ static const AVOption options[] = {
     { "ll",           "Low latency",                        0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TUNING_INFO_LOW_LATENCY },       0, 0, VE, .unit = "tune" },
     { "ull",          "Ultra low latency",                  0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY }, 0, 0, VE, .unit = "tune" },
     { "lossless",     "Lossless",                           0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_TUNING_INFO_LOSSLESS },          0, 0, VE, .unit = "tune" },
+#ifdef NVENC_HAVE_SPLIT_ENCODE
+    { "split_encode", "Set the split encoding mode",        OFFSET(split_encode), AV_OPT_TYPE_INT,   { .i64 = NV_ENC_SPLIT_AUTO_MODE }, NV_ENC_SPLIT_AUTO_MODE, NV_ENC_SPLIT_DISABLE_MODE, VE, .unit = "split" },
+    { "auto",         "Automatic",                          0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_AUTO_MODE },         0, 0, VE, .unit = "split" },
+    { "forced",       "Forced on",                          0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_AUTO_FORCED_MODE },  0, 0, VE, .unit = "split" },
+    { "2way",         "Forced 2-way split",                 0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_TWO_FORCED_MODE },   0, 0, VE, .unit = "split" },
+    { "3way",         "Forced 3-way split",                 0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_THREE_FORCED_MODE }, 0, 0, VE, .unit = "split" },
+    { "disabled",     "Disabled",                           0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_SPLIT_DISABLE_MODE },      0, 0, VE, .unit = "split" },
+#endif
     { "level",        "Set the encoding level restriction", OFFSET(level),        AV_OPT_TYPE_INT,   { .i64 = NV_ENC_LEVEL_AV1_AUTOSELECT }, NV_ENC_LEVEL_AV1_2, NV_ENC_LEVEL_AV1_AUTOSELECT, VE, .unit = "level" },
     { "auto",         "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_LEVEL_AV1_AUTOSELECT },  0, 0, VE,  .unit = "level" },
     { "2",            "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_LEVEL_AV1_2 },           0, 0, VE,  .unit = "level" },
