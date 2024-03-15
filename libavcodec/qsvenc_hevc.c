@@ -318,6 +318,7 @@ static const AVOption options[] = {
     QSV_OPTION_SCENARIO
     QSV_OPTION_AVBR
     QSV_OPTION_SKIP_FRAME
+    QSV_OPTION_ADAPTIVE_CQM
 #if QSV_HAVE_HE
     QSV_HE_OPTIONS
 #endif

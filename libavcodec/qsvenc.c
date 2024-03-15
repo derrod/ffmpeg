@@ -1164,6 +1164,10 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
                 q->extco3.TransformSkip = MFX_CODINGOPTION_UNKNOWN;
             q->extco3.GPB              = q->gpb ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
         }
+        
+        if (q->adaptive_cqm >= 0)
+            q->extco3.AdaptiveCQM = q->adaptive_cqm ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
+        
         q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extco3;
     }
 

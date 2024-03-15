@@ -149,6 +149,9 @@
 { "brc_only",       "skip_frame metadata indicates the number of missed frames before the current frame", \
     0, AV_OPT_TYPE_CONST, { .i64 = MFX_SKIPFRAME_BRC_ONLY },          .flags = VE, .unit = "skip_frame" },
 
+#define QSV_OPTION_ADAPTIVE_CQM \
+{ "adaptive_cqm",   "Adaptive quantization", OFFSET(qsv.adaptive_cqm),  AV_OPT_TYPE_BOOL,{ .i64 = -1 }, -1,          1, VE },
+
 extern const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[];
 
 typedef int SetEncodeCtrlCB (AVCodecContext *avctx,
@@ -242,6 +245,7 @@ typedef struct QSVEncContext {
     int b_strategy;
     int p_strategy;
     int cavlc;
+    int adaptive_cqm;
 
     int int_ref_type;
     int int_ref_cycle_size;
