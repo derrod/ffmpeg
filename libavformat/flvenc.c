@@ -807,12 +807,16 @@ static int flv_init(struct AVFormatContext *s)
                 flv->framerate = av_q2d(s->streams[i]->avg_frame_rate);
             }
             flv->video_track_idx_map[i] = video_ctr++;
-            if (flv->video_par) {
+            if (flv->video_par && !(flv->flags & FLV_ADD_KEYFRAME_INDEX)) {
                 av_log(s, AV_LOG_WARNING,
                        "more than one video stream is not supported by most flv demuxers.\n");
-                break;
+            } else if (flv->video_par) {
+                av_log(s, AV_LOG_ERROR,
+                       "at most one video stream is supported in flv with keyframe index\n");
+                return AVERROR(EINVAL);
             }
-            flv->video_par = par;
+            if (!flv->video_par)
+                flv->video_par = par;
             if (!ff_codec_get_tag(flv_video_codec_ids, par->codec_id))
                 return unsupported_codec(s, "Video", par->codec_id);
 
