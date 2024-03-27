@@ -105,6 +105,10 @@ typedef struct FLVContext {
 
     FLVMetaVideoColor *metaVideoColor;
     int meta_color_info_flag;
+    
+    uint8_t **multitrack_extradata;
+    int *multitrack_extradata_size;
+    int multitrack_extradata_count;
 } FLVContext;
 
 /* AMF date type */
@@ -351,6 +355,7 @@ static int flv_same_video_codec(AVCodecParameters *vpar, uint32_t flv_codecid)
     case FLV_CODECID_VP6A:
         return vpar->codec_id == AV_CODEC_ID_VP6A;
     case FLV_CODECID_H264:
+    case MKBETAG('a', 'v', 'c', '1'):
         return vpar->codec_id == AV_CODEC_ID_H264;
     default:
         return vpar->codec_tag == flv_codecid;
@@ -407,6 +412,7 @@ static int flv_set_video_codec(AVFormatContext *s, AVStream *vstream,
         ret = 1;     // 1 byte body size adjustment for flv_read_packet()
         break;
     case FLV_CODECID_H264:
+    case MKBETAG('a', 'v', 'c', '1'):
         par->codec_id = AV_CODEC_ID_H264;
         vstreami->need_parsing = AVSTREAM_PARSE_HEADERS;
         break;
@@ -885,6 +891,9 @@ static int flv_read_close(AVFormatContext *s)
     FLVContext *flv = s->priv_data;
     for (i=0; i<FLV_STREAM_TYPE_NB; i++)
         av_freep(&flv->new_extradata[i]);
+    for (i=0; i < flv->multitrack_extradata_count; i++)
+        av_freep(&flv->multitrack_extradata[i]);
+    av_freep(&flv->multitrack_extradata_size);
     av_freep(&flv->keyframe_times);
     av_freep(&flv->keyframe_filepositions);
     av_freep(&flv->metaVideoColor);
@@ -904,18 +913,43 @@ static int flv_get_extradata(AVFormatContext *s, AVStream *st, int size)
 }
 
 static int flv_queue_extradata(FLVContext *flv, AVIOContext *pb, int stream,
-                               int size)
+                               int size, int multitrack)
 {
     if (!size)
         return 0;
 
-    av_free(flv->new_extradata[stream]);
-    flv->new_extradata[stream] = av_mallocz(size +
-                                            AV_INPUT_BUFFER_PADDING_SIZE);
-    if (!flv->new_extradata[stream])
-        return AVERROR(ENOMEM);
-    flv->new_extradata_size[stream] = size;
-    avio_read(pb, flv->new_extradata[stream], size);
+    if (!multitrack) {
+        av_free(flv->new_extradata[stream]);
+        flv->new_extradata[stream] = av_mallocz(size +
+                                                AV_INPUT_BUFFER_PADDING_SIZE);
+        if (!flv->new_extradata[stream])
+            return AVERROR(ENOMEM);
+        flv->new_extradata_size[stream] = size;
+        avio_read(pb, flv->new_extradata[stream], size);
+    } else {
+        int count = stream + 1;
+        // Realloc if current extradata too small
+        if (flv->multitrack_extradata_count < count) {
+            flv->multitrack_extradata = av_realloc(flv->multitrack_extradata,
+                                                   sizeof(*flv->multitrack_extradata) * count);
+            flv->multitrack_extradata_size = av_realloc(flv->multitrack_extradata_size,
+                                                        sizeof(*flv->multitrack_extradata_size) * count);
+            // Ensure new memory is zero'd out
+            memset(flv->multitrack_extradata + flv->multitrack_extradata_count * sizeof(*flv->multitrack_extradata),
+                   0,
+                   (count - flv->multitrack_extradata_count) * sizeof(*flv->multitrack_extradata));
+            flv->multitrack_extradata_count = count;
+        }
+        
+        av_free(flv->multitrack_extradata[stream]);
+        flv->multitrack_extradata[stream] = av_mallocz(size +
+                                                       AV_INPUT_BUFFER_PADDING_SIZE);
+        if (!flv->multitrack_extradata[stream])
+            return AVERROR(ENOMEM);
+        flv->multitrack_extradata_size[stream] = size;
+        avio_read(pb, flv->multitrack_extradata[stream], size);
+    }
+    
     return 0;
 }
 
@@ -1203,6 +1237,9 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
     int last = -1;
     int orig_size;
     int enhanced_flv = 0;
+    int multitrack = 0;
+    int pkt_type = 0;
+    uint8_t track_idx = 0;
     uint32_t video_codec_id = 0;
 
 retry:
@@ -1256,14 +1293,33 @@ retry:
          * https://github.com/veovera/enhanced-rtmp/blob/main/enhanced-rtmp-v1.pdf
          * */
         enhanced_flv = (flags >> 7) & 1;
+        pkt_type = enhanced_flv ? video_codec_id : 0;
         size--;
+        
+        if (pkt_type == PacketTypeMultitrack) {
+            uint8_t types = avio_r8(s->pb);
+            int multitrack_type = types >> 4;
+            pkt_type = types & 0xF;
+            
+            if (multitrack_type != MultitrackTypeOneTrack) {
+                av_log(s, AV_LOG_ERROR, "Multitrack types other than MultitrackTypeOneTrack are unsupported!\n");
+                return AVERROR_PATCHWELCOME;
+            }
+            
+            multitrack = 1;
+            size--;
+        }
+        
         if (enhanced_flv) {
             video_codec_id = avio_rb32(s->pb);
             size -= 4;
         }
+        if (multitrack) {
+            track_idx = avio_r8(s->pb);
+            size--;
+        }
 
-        if (enhanced_flv && stream_type == FLV_STREAM_TYPE_VIDEO && (flags & FLV_VIDEO_FRAMETYPE_MASK) == FLV_FRAME_VIDEO_INFO_CMD) {
-            int pkt_type = flags & 0x0F;
+        if (enhanced_flv && (flags & FLV_VIDEO_FRAMETYPE_MASK) == FLV_FRAME_VIDEO_INFO_CMD) {
             if (pkt_type == PacketTypeMetadata) {
                 int ret = flv_parse_video_color_info(s, st, next);
                 av_log(s, AV_LOG_DEBUG, "enhanced flv parse metadata ret %d and skip\n", ret);
@@ -1327,7 +1383,8 @@ skip:
                 break;
         } else if (stream_type == FLV_STREAM_TYPE_VIDEO) {
             if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
-                (s->video_codec_id || flv_same_video_codec(st->codecpar, video_codec_id)))
+                (s->video_codec_id || flv_same_video_codec(st->codecpar, video_codec_id)) &&
+                st->id == track_idx)
                 break;
         } else if (stream_type == FLV_STREAM_TYPE_SUBTITLE) {
             if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE)
@@ -1342,6 +1399,7 @@ skip:
         st = create_stream(s, stream_types[stream_type]);
         if (!st)
             return AVERROR(ENOMEM);
+        st->id = track_idx;
     }
     av_log(s, AV_LOG_TRACE, "%d %X %d \n", stream_type, flags, st->discard);
 
@@ -1446,7 +1504,7 @@ retry_duration:
         st->codecpar->codec_id == AV_CODEC_ID_VP9) {
         int type = 0;
         if (enhanced_flv && stream_type == FLV_STREAM_TYPE_VIDEO) {
-            type = flags & 0x0F;
+            type = pkt_type;
         } else {
             type = avio_r8(s->pb);
             size--;
@@ -1462,7 +1520,8 @@ retry_duration:
             flv->meta_color_info_flag = 0;
         }
 
-        if (st->codecpar->codec_id == AV_CODEC_ID_H264 || st->codecpar->codec_id == AV_CODEC_ID_MPEG4 ||
+        if (st->codecpar->codec_id == AV_CODEC_ID_MPEG4 ||
+            (st->codecpar->codec_id == AV_CODEC_ID_H264 && (!enhanced_flv || type == PacketTypeCodedFrames)) ||
             (st->codecpar->codec_id == AV_CODEC_ID_HEVC && type == PacketTypeCodedFrames)) {
             // sign extension
             int32_t cts = (avio_rb24(s->pb) + 0xff800000) ^ 0xff800000;
@@ -1485,7 +1544,7 @@ retry_duration:
             AVDictionaryEntry *t;
 
             if (st->codecpar->extradata) {
-                if ((ret = flv_queue_extradata(flv, s->pb, stream_type, size)) < 0)
+                if ((ret = flv_queue_extradata(flv, s->pb, multitrack ? track_idx : stream_type, size, multitrack)) < 0)
                     return ret;
                 ret = FFERROR_REDO;
                 goto leave;
@@ -1516,13 +1575,23 @@ retry_duration:
     pkt->pts          = pts == AV_NOPTS_VALUE ? dts : pts;
     pkt->stream_index = st->index;
     pkt->pos          = pos;
-    if (flv->new_extradata[stream_type]) {
+    if (!multitrack && flv->new_extradata[stream_type]) {
         int ret = av_packet_add_side_data(pkt, AV_PKT_DATA_NEW_EXTRADATA,
                                           flv->new_extradata[stream_type],
                                           flv->new_extradata_size[stream_type]);
         if (ret >= 0) {
             flv->new_extradata[stream_type]      = NULL;
             flv->new_extradata_size[stream_type] = 0;
+        }
+    } else if (multitrack
+               && flv->multitrack_extradata_count > track_idx
+               && flv->multitrack_extradata[track_idx]) {
+        int ret = av_packet_add_side_data(pkt, AV_PKT_DATA_NEW_EXTRADATA,
+                                          flv->multitrack_extradata[track_idx],
+                                          flv->multitrack_extradata_size[track_idx]);
+        if (ret >= 0) {
+            flv->multitrack_extradata[track_idx]      = NULL;
+            flv->multitrack_extradata_size[track_idx] = 0;
         }
     }
     if (stream_type == FLV_STREAM_TYPE_AUDIO &&
